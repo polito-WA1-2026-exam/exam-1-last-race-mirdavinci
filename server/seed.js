@@ -31,17 +31,17 @@ const db = new sqlite.Database(dbPath, (err) => {
 });
 
 const stationsList = [
-    "Fermi", "Prinzetti", "Porta Susa", "Porta Nuova", "Carducci", "Bengasi",
-    "Stura", "Rebaudengo", "Nizza", "Lingotto", "Venaria", "Madonna di Campagna",
-    "Fontana", "San Salvario", "Rivoli", "Racconigi", "Mirafiori"
+  "Tajrish", "Shariati", "Darvazeh Dowlat", "Taleghani", "Panzdah-e Khordad", "Kahrizak",
+    "Sadeghieh", "Shademan", "Meydan-e Enghelab", "Baharestan", "Darvazeh Shemiran", "Tehranpars",
+    "Azadegan", "Rahahan", "Teatr-e Shahr", "Meydan-e Vali Asr", "Nobonyad", "Ghaem",
+    "Ekbatan", "Kolahdouz"
 ];
 
 const linesData = [
-    { name: "Linea Rossa", color: "#FF0000", stops: ["Fermi", "Prinzetti", "Porta Susa", "Porta Nuova", "Carducci", "Bengasi"] },
-    { name: "Linea Blu", color: "#0000FF", stops: ["Stura", "Rebaudengo", "Porta Susa", "Porta Nuova", "Nizza", "Lingotto"] },
-    { name: "Linea Verde", color: "#008000", stops: ["Venaria", "Madonna di Campagna", "Porta Susa", "Fontana", "San Salvario"] },
-    { name: "Linea Gialla", color: "#FFFF00", stops: ["Rivoli", "Racconigi", "Porta Nuova", "Fontana", "Mirafiori"] }
-];
+{ name: "Red Line", color: "#D32F2F", stops: ["Tajrish", "Shariati", "Darvazeh Dowlat", "Taleghani", "Panzdah-e Khordad", "Kahrizak"] },
+{ name: "Blue Line", color: "#1976D2", stops: ["Sadeghieh", "Shademan", "Meydan-e Enghelab", "Baharestan", "Darvazeh Shemiran", "Tehranpars"] },
+{ name: "Green Line", color: "#5fccff", stops: ["Azadegan", "Rahahan", "Teatr-e Shahr", "Meydan-e Vali Asr", "Nobonyad", "Ghaem"] },
+{ name: "Yellow Line", color: "#FBC02D", stops: ["Ekbatan", "Shademan", "Teatr-e Shahr", "Darvazeh Dowlat", "Darvazeh Shemiran", "Kolahdouz"] }];
 
 const eventsData = [
     { description: "Quiet journey, seamless transfers.", effect_coins: 0, is_bad_event: 0 },
@@ -71,17 +71,19 @@ async function runSeeding() {
         console.log("-> Hashing application passwords with bcrypt... (Please wait a moment)");
         const saltRounds = 10;
         const user1Hash = await bcrypt.hash('password123', saltRounds);
-        const user2Hash = await bcrypt.hash('torino2026', saltRounds);
-        const user3Hash = await bcrypt.hash('secret3', saltRounds);
+        const user2Hash = await bcrypt.hash('password123', saltRounds);
+        const user3Hash = await bcrypt.hash('password123', saltRounds);
+
 
         console.log("-> Inserting pre-seeded user records...");
         await new Promise((resolve, reject) => {
-            db.run(`INSERT INTO users (id, username, password_hash) VALUES (1, 'player_one', ?), (2, 'player_two', ?), (3, 'player_three', ?)`, 
+            db.run(`INSERT INTO users (id, username, password_hash) VALUES (1, 'mohsen', ?), (2, 'Sara', ?), (3, 'Ali', ?)`, 
                 [user1Hash, user2Hash, user3Hash], (err) => {
                     if (err) reject(err);
                     else resolve();
                 });
         });
+
 
         console.log("-> Inserting historical scores dataset...");
         await new Promise((resolve, reject) => {

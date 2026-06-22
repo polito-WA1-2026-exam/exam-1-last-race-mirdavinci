@@ -3,6 +3,16 @@ import { Container, Navbar, Nav, Button, Card, Row, Col, Alert, Table, Form, Lis
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { API } from './api';
 
+// Dynamic helper function to color-code map headers (Tehran Metro)
+const getLineColor = (lineName) => {
+  const lower = lineName.toLowerCase();
+  if (lower.includes('red')) return '#D32F2F';
+  if (lower.includes('blue')) return '#1976D2';
+  if (lower.includes('green')) return '#388E3C';
+  if (lower.includes('yellow')) return '#FBC02D';
+  return '#424242';
+};
+
 export default function App() {
 
   //AUTHENTICATION & NAVIGATION STATE 
@@ -15,14 +25,14 @@ export default function App() {
   //GLOBAL DATA DATASETS
   const [rankings, setRankings] = useState([]);
   const [network, setNetwork] = useState({ lines: {} });
-  const [allStations, setAllStations] = useState([]); // Added missing state variable for backend station sync
+  const [allStations, setAllStations] = useState([]); 
 
   //GAMEPLAY CORE ENGINE STATE
-  const [gameState, setGameState] = useState('idle'); // Options: idle, memo, planning, execution, result
+  const [gameState, setGameState] = useState('idle'); 
   const [startStation, setStartStation] = useState('');
   const [destStation, setDestStation] = useState('');
   const [segmentsPool, setSegmentsPool] = useState([]);
-  const [selectedRoute, setSelectedRoute] = useState([]); // Array of station names tracked in sequence
+  const [selectedRoute, setSelectedRoute] = useState([]); 
   const [memoTimer, setMemoTimer] = useState(10);
   const [planTimer, setPlanTimer] = useState(90);
 
@@ -32,7 +42,6 @@ export default function App() {
   const [runningCoins, setRunningCoins] = useState(20);
   const [gameOutcome, setGameOutcome] = useState(null);
 
-  // References to handle interval drops safely across fast phase transitions
   const memoIntervalRef = useRef(null);
   const planIntervalRef = useRef(null);
 
@@ -40,7 +49,6 @@ export default function App() {
     if (memoIntervalRef.current) clearInterval(memoIntervalRef.current);
     if (planIntervalRef.current) clearInterval(planIntervalRef.current);
     
-    // 🛡️ Guard Clause: If a user state already exists, do not run the background session check
     if (!user) {
       API.checkSession()
         .then(userProfile => {
@@ -48,55 +56,43 @@ export default function App() {
           if (verified && verified.username) setUser(verified);
         })
         .catch(() => {
-          // If no active session, ensure we stay clear without breaking active components
           setUser(null);
         });
     }
     
     API.getRankings().then(data => setRankings(data)).catch(console.error);
     
-    // Dynamic Station Fetching Layer from Server Network Map
     API.getNetwork()
       .then(data => {
         const linesMap = data.lines || data;
         setNetwork(linesMap);
 
-        // Extract every unique station name dynamically from the backend structure
         const uniqueStations = new Set();
         Object.values(linesMap).forEach(lineObj => {
-          // This handles both a direct array of stations or an object containing a .stations array
           const stationList = Array.isArray(lineObj) ? lineObj : lineObj.stations;
           if (stationList) {
             stationList.forEach(station => uniqueStations.add(station));
           }
         });
 
-        // Save the dynamic station list to state so the rest of your app can use it
         setAllStations(Array.from(uniqueStations));
       })
       .catch(console.error);
-  }, []); // <-- FIXED: Cleanly closed out the lifecycle mounting hook layout block!
+  }, []);
 
   const handleLogin = (e) => {
     e.preventDefault();
     setAuthError('');
     API.login(loginUsername, loginPassword)
       .then(userProfile => {
-        console.log("🎯 Raw Login Response:", userProfile);
-        
-        // Extract user data even if your API wrapper nests it inside an object
         const finalUser = userProfile?.user || userProfile?.data || userProfile;
-        
         if (finalUser && finalUser.username) {
           setUser(finalUser);
           setView('instructions');
           setGameState('idle');
-        } else {
-          console.warn("⚠️ Login returned an unexpected format:", userProfile);
         }
       })
       .catch(err => {
-        console.error("❌ Login failed:", err);
         setAuthError(err.message || 'Invalid credentials.');
       });
   };
@@ -108,9 +104,7 @@ export default function App() {
         setView('instructions');
         setGameState('idle');
       })
-      .catch(err => {
-        console.warn("Logout parse notice:", err.message);
-        // Fallback: update state anyway so the user isn't stuck on the screen
+      .catch(() => {
         setUser(null);
         setView('instructions');
         setGameState('idle');
@@ -122,7 +116,6 @@ export default function App() {
   };
 
   const handleStartGame = () => {
-    // Aggressively clear active intervals right at the threshold edge
     if (memoIntervalRef.current) clearInterval(memoIntervalRef.current);
     if (planIntervalRef.current) clearInterval(planIntervalRef.current);
 
@@ -151,8 +144,8 @@ export default function App() {
         }, 1000);
       })
       .catch(err => {
-        console.error("Critical game launcher failure:", err);
-        alert("Failed to start game session. Ensure your backend server is running on port 3001.");
+        console.error(err);
+        alert("Failed to start game session.");
       });
   };
 
@@ -162,12 +155,11 @@ export default function App() {
     setGameState('planning');
     setPlanTimer(90);
 
-    // Setup 90-second active route submission countdown clock
     planIntervalRef.current = setInterval(() => {
       setPlanTimer(prev => {
         if (prev <= 1) {
           clearInterval(planIntervalRef.current);
-          forceAutoSubmit();
+          submitRoutePlan();
           return 0;
         }
         return prev - 1;
@@ -182,12 +174,11 @@ export default function App() {
     if (seg.source === currentEndpoint) nextStation = seg.destination;
     else if (seg.destination === currentEndpoint) nextStation = seg.source;
     else {
-      // User selected a node pair that is valid on the network but disconnected from their current sequence chain position
       nextStation = seg.source; 
     }
 
     setSelectedRoute([...selectedRoute, nextStation]);
-    setSegmentsPool(segmentsPool.filter(s => s !== seg)); // Remove chosen pair from pool
+    setSegmentsPool(segmentsPool.filter(s => s !== seg)); 
   };
 
   const handleUndoLastStep = () => {
@@ -204,36 +195,26 @@ export default function App() {
   };
 
   const submitRoutePlan = () => {
-    // Clear out the planning clock immediately
     if (planIntervalRef.current) clearInterval(planIntervalRef.current);
     
     API.submitRoute(selectedRoute, startStation, destStation)
       .then(result => {
         setGameOutcome(result);
-        
         if (result && result.valid) {
           setGameState('execution');
           setExecutionLogs(result.actionsLog || []);
           setCurrentStepIndex(0);
           setRunningCoins(20);
         } else {
-          // FORCE state transition to 'result' instantly for invalid routes 
-          // This removes the planning board and updates the logout button status!
           setGameState('result');
           setRunningCoins(0);
         }
         refreshRankings();
       })
-      .catch(err => {
-        console.error("Submission pipeline failure:", err);
-        // Safety fallback to prevent UI freezing if the network fails
+      .catch(() => {
         setGameState('result');
         setRunningCoins(0);
       });
-  };
-
-  const forceAutoSubmit = () => {
-    submitRoutePlan();
   };
 
   const handleNextExecutionStep = () => {
@@ -246,39 +227,66 @@ export default function App() {
     }
   };
 
-  //CLIENT-SIDE LIVE DISCONNECTED TRACKING VALIDATOR
   const checkIsRouteDisconnected = () => {
+    const linesMap = network?.lines || network;
+    if (!linesMap || Object.keys(linesMap).length === 0) return false;
+
     for (let i = 0; i < selectedRoute.length - 1; i++) {
       const s1 = selectedRoute[i];
       const s2 = selectedRoute[i + 1];
       let directLinkExists = false;
 
-      Object.values(network.lines).forEach(line => {
-        const idx1 = line.stations.indexOf(s1);
-        const idx2 = line.stations.indexOf(s2);
+      Object.values(linesMap).forEach(line => {
+        const stationsArray = Array.isArray(line) ? line : line?.stations;
+        if (!stationsArray) return;
+
+        const idx1 = stationsArray.indexOf(s1);
+        const idx2 = stationsArray.indexOf(s2);
         if (idx1 !== -1 && idx2 !== -1 && Math.abs(idx1 - idx2) === 1) {
           directLinkExists = true;
         }
       });
-      if (!directLinkExists) return true; // Segment does not share a continuous direct connecting transit line layout
+      if (!directLinkExists) return true; 
     }
     return false;
   };
 
   const isDisconnected = checkIsRouteDisconnected();
 
+const navigateTo = (targetView) => {
+
+    //kill timer if we are leaving the game
+    if (targetView !== 'game') {
+      if (memoIntervalRef.current) clearInterval(memoIntervalRef.current);
+      if (planIntervalRef.current) clearInterval(planIntervalRef.current);
+      setGameState('idle');
+    }
+    
+    setView(targetView);
+    
+    if (targetView === 'rankings') {
+      refreshRankings();
+    }
+  };
+
   return (
     <div className="bg-light min-vh-100 pb-5">
-      {/* GLOBAL NAVBAR COMPONENT HEADER */}
+
       <Navbar bg="dark" variant="dark" className="mb-4 px-4 shadow-sm">
-        <Navbar.Brand href="#home" onClick={() => { if(gameState==='idle') setView('instructions'); }}>
-          🚇 Last Race — Turin Metro SPA
-        </Navbar.Brand>
-        <Nav className="me-auto">
-          <Nav.Link active={view === 'instructions'} onClick={() => { if(gameState==='idle') setView('instructions'); }}>Game Rules</Nav.Link>
-          <Nav.Link active={view === 'rankings'} onClick={() => { if(gameState==='idle') setView('rankings'); refreshRankings(); }}>Leaderboard</Nav.Link>
-          {user && <Nav.Link active={view === 'game'} onClick={() => setView('game')}>Gameplay Console</Nav.Link>}
-        </Nav>
+       <Navbar.Brand href="#home" onClick={() => navigateTo('instructions')}>
+  🚇 Last Race — Metro Network Console
+</Navbar.Brand>
+<Nav className="me-auto">
+  <Nav.Link active={view === 'instructions'} onClick={() => navigateTo('instructions')}>
+    Game Rules
+  </Nav.Link>
+  <Nav.Link active={view === 'rankings'} onClick={() => navigateTo('rankings')}>
+    Leaderboard
+  </Nav.Link>
+  {user && <Nav.Link active={view === 'game'} onClick={() => navigateTo('game')}>
+    Gameplay Console
+  </Nav.Link>}
+</Nav>
         <Navbar.Collapse className="justify-content-end">
           {user ? (
             <div className="text-white">
@@ -297,7 +305,7 @@ export default function App() {
       </Navbar>
 
       <Container>
-        {/* VIEW A: MANUAL INSTRUCTIONS & REFERENCE METRO GUIDE MAP */}
+        {/* VIEW A:REFERENCE METRO GUIDE MAP */}
         {view === 'instructions' && (
           <Row>
             <Col md={12} className="mb-4">
@@ -305,7 +313,7 @@ export default function App() {
                 <Card.Body>
                   <Card.Title className="fs-3 text-primary mb-2">Race the Rails Challenge Setup</Card.Title>
                   <Card.Text className="text-muted">
-                    Navigate from a randomly assigned starting station to your destination station within the Turin underground infrastructure layout. 
+                    Navigate from a randomly assigned starting station to your destination station within the underground infrastructure layout. 
                     Reconstruct the map paths completely from memory within the allotted timeframe to score high placements!
                   </Card.Text>
                   {!user && (
@@ -328,21 +336,24 @@ export default function App() {
                   <Card.Body>
                     <Card.Title className="text-secondary mb-3">📐 System Reference Metro Infrastructure Map Layout</Card.Title>
                     <Row>
-                      {Object.entries(network.lines || network).map(([lineName, lineObj]) => (
-                        <Col md={6} key={lineName} className="mb-3">
-                          <div className="p-3 border rounded shadow-2xs" style={{ borderLeft: `6px solid ${lineObj.color || '#333'}` }}>
-                            <h5 style={{ color: lineObj.color || '#333' }} className="fw-bold">{lineName}</h5>
-                            <div className="d-flex flex-wrap gap-1 align-items-center mt-2">
-                              {(lineObj.stations || (Array.isArray(lineObj) ? lineObj : [])).map((st, idx, arr) => (
-                                <React.Fragment key={st}>
-                                  <Badge bg="dark" className="p-2 fs-7">{st}</Badge>
-                                  {idx < arr.length - 1 && <span className="text-muted font-monospace">➔</span>}
-                                </React.Fragment>
-                              ))}
+                      {Object.entries(network?.lines || network || {}).map(([lineName, lineData]) => {
+                        const stations = Array.isArray(lineData) ? lineData : lineData?.stations || [];
+                        return (
+                          <Col md={6} key={lineName} className="mb-3">
+                            <div className="p-3 border rounded shadow-sm bg-white" style={{ borderLeft: `6px solid ${getLineColor(lineName)}` }}>
+                              <h5 style={{ color: getLineColor(lineName) }} className="fw-bold">{lineName}</h5>
+                              <div className="d-flex flex-wrap gap-1 align-items-center mt-2">
+                                {stations.map((station, index) => (
+                                  <React.Fragment key={station}>
+                                    <Badge bg="dark" className="p-2 fs-7">{station}</Badge>
+                                    {index < stations.length - 1 && <span className="text-muted font-monospace">➔</span>}
+                                  </React.Fragment>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        </Col>
-                      ))}
+                          </Col>
+                        );
+                      })}
                     </Row>
                   </Card.Body>
                 </Card>
@@ -351,7 +362,7 @@ export default function App() {
           </Row>
         )}
 
-        {/* VIEW B: GLOBAL LEADERBOARD RANKINGS */}
+        {/*GLOBAL LEADERBOARD RANKINGS */}
         {view === 'rankings' && (
           <Card className="shadow-sm border-0">
             <Card.Body>
@@ -378,11 +389,20 @@ export default function App() {
           </Card>
         )}
 
-        {/* VIEW C: ACTIVE GAME INTERACTIVE WINDOW */}
+
         {view === 'game' && (
           <Card className="shadow-sm border-0">
             <Card.Body>
-              {/* MEMORIZATION STUDY COMPONENT */}
+
+              {gameState === 'idle' && (
+                <div className="text-center py-5">
+                  <h4 className="text-muted mb-4">No active transit mission.</h4>
+                  <Button size="lg" variant="success" className="px-4 shadow-sm fw-bold" onClick={handleStartGame}>
+                    Launch Faction Journey 🚀
+                  </Button>
+                </div>
+              )}
+
               {gameState === 'memo' && (
                 <div className="text-center py-4">
                   <Alert variant="info" className="fs-4 shadow-sm border-0 bg-primary text-white fw-bold mb-4">
@@ -392,16 +412,19 @@ export default function App() {
                     Skip Timer, Let's Plan! 🕹️
                   </Button>
                   <Row className="text-start">
-                    {Object.entries(network.lines || network).map(([name, obj]) => (
-                      <Col md={6} key={name} className="mb-3">
-                        <Card style={{ borderLeft: `6px solid ${obj.color || '#333'}` }} className="border-0 shadow-sm">
-                          <Card.Body>
-                            <h5 style={{ color: obj.color || '#333' }} className="fw-bold">{name}</h5>
-                            <p className="mb-0 text-muted">{(obj.stations || (Array.isArray(obj) ? obj : [])).join(' ➔ ')}</p>
-                          </Card.Body>
-                        </Card>
-                      </Col>
-                    ))}
+                    {Object.entries(network?.lines || network || {}).map(([lineName, lineData]) => {
+                      const stations = Array.isArray(lineData) ? lineData : lineData?.stations || [];
+                      return (
+                        <Col md={6} key={lineName} className="mb-3">
+                          <Card style={{ borderLeft: `6px solid ${getLineColor(lineName)}` }} className="border-0 shadow-sm">
+                            <Card.Body>
+                              <h5 style={{ color: getLineColor(lineName) }} className="fw-bold">{lineName}</h5>
+                              <p className="mb-0 text-muted">{stations.join(' ➔ ')}</p>
+                            </Card.Body>
+                          </Card>
+                        </Col>
+                      );
+                    })}
                   </Row>
                 </div>
               )}
@@ -409,6 +432,18 @@ export default function App() {
               {/*ACTIVE TIMER ROUTE PLANNING EDITOR */}
               {gameState === 'planning' && (
                 <div>
+
+                  <div className="mb-4 p-3 bg-white rounded shadow-sm border">
+                    <h6 className="fw-bold text-secondary mb-2">📍 Unlinked Station Reference Board:</h6>
+                    <div className="d-flex flex-wrap gap-2">
+                      {allStations.map((station, idx) => (
+                        <Badge bg="light" text="dark" className="p-2 border fs-7" key={idx}>
+                          {station}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
                   <Row className="mb-4 align-items-center bg-dark text-white p-3 rounded shadow-sm mx-1">
                     <Col>
                       <h5 className="text-muted text-uppercase mb-1 fs-7">Assigned Mission Blueprint Route:</h5>
@@ -459,7 +494,7 @@ export default function App() {
                       </Card>
                     </Col>
 
-                    {/* Shuffled Action Choices Selection Board Column */}
+
                     <Col md={7} className="mb-3">
                       <Card className="h-100 border-0 bg-white shadow-sm">
                         <Card.Body>

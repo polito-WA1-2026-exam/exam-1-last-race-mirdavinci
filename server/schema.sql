@@ -5,14 +5,14 @@ DROP TABLE IF EXISTS stations;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS users;
 
--- Users Table
+
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL
 );
 
--- Events Table
+
 CREATE TABLE events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     description TEXT NOT NULL,
@@ -20,20 +20,20 @@ CREATE TABLE events (
     is_bad_event INTEGER NOT NULL DEFAULT 0
 );
 
--- Stations Table
+
 CREATE TABLE stations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
--- Lines Table
+
 CREATE TABLE lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     color TEXT NOT NULL
 );
 
--- Junction Table connecting Stations to Lines to represent paths structurally
+
 CREATE TABLE line_stations (
     line_id INTEGER,
     station_id INTEGER,
@@ -43,7 +43,7 @@ CREATE TABLE line_stations (
     FOREIGN KEY(station_id) REFERENCES stations(id) ON DELETE CASCADE
 );
 
--- Game History Table
+
 CREATE TABLE game_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,

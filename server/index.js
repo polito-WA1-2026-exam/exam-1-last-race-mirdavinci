@@ -12,44 +12,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001; // API server runs on 3001, React frontend runs on 5173 
+const PORT = 3001; 
 
 // 1. Connect to SQLite database
 const db = new sqlite3.Database(path.join(__dirname, 'database.sqlite'), (err) => {
     if (err) console.error("❌ Database connection error:", err);
     else {
         console.log("💾 Connected to SQLite database successfully.");
-        // Seed your custom user account into the database right upon a successful connection
-        seedCustomUser();
     }
 });
-
-// Utility script to inject your custom test user directly into the DB safely
-async function seedCustomUser() {
-    const customUsername = 'mohsen';
-    const plainPassword = 'mypassword123';
-    
-    db.get("SELECT id FROM users WHERE username = ?", [customUsername], async (err, row) => {
-        if (err) {
-            console.error("❌ Error checking for seeded user:", err);
-            return;
-        }
-        if (!row) {
-            try {
-                const passwordHash = await bcrypt.hash(plainPassword, 10);
-                db.run("INSERT INTO users (username, password_hash) VALUES (?, ?)", [customUsername, passwordHash], (insertErr) => {
-                    if (insertErr) {
-                        console.error("❌ Failed to seed custom test user:", insertErr.message);
-                    } else {
-                        console.log(`💾 DB Seed: Custom account '${customUsername}' created successfully!`);
-                    }
-                });
-            } catch (hashError) {
-                console.error("❌ Error hashing seed password:", hashError);
-            }
-        }
-    });
-}
 
 // 2. Middleware & CORS Configuration
 app.use(cors({
@@ -74,15 +45,24 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-passport.use(new LocalStrategy(async (username, password, done) => {
-    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-        if (err) return done(err);
-        if (!user) return done(null, false, { message: 'Invalid credentials.' });
-        
-        const match = await bcrypt.compare(password, user.password_hash); 
-        if (!match) return done(null, false, { message: 'Invalid credentials.' });
-        
-        return done(null, user);
+// FIXED: Cleaned up the nested LocalStrategy blocks!
+passport.use(new LocalStrategy((username, password, cb) => {
+    console.log("🛑 PASSPORT RECEIVED -> Username:", username, "| Password:", password);
+
+    // 1. Look up the user
+    db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
+        if (err) return cb(err);
+        if (!row) return cb(null, false, { message: 'Incorrect username.' });
+
+        // 2. Compare the typed password with the hashed password in the DB
+        bcrypt.compare(password, row.password_hash, (err, isMatch) => {
+            if (err) return cb(err);
+            if (!isMatch) return cb(null, false, { message: 'Incorrect password.' });
+            
+            // 3. Success! Return the user object
+            const user = { id: row.id, username: row.username };
+            return cb(null, user);
+        });
     });
 }));
 
@@ -97,7 +77,9 @@ const isLoggedIn = (req, res, next) => {
     return res.status(401).json({ error: 'User is unauthenticated.' });
 };
 
-// --- HTTP API ROUTING LAYERS ---
+// ==========================================
+// HTTP API ROUTING LAYERS
+// ==========================================
 
 // Session management 
 app.post('/api/login', passport.authenticate('local'), (req, res) => {
@@ -116,7 +98,7 @@ app.get('/api/session', (req, res) => {
     else res.status(401).json({ error: 'No active session.' });
 });
 
-// 1. General High-Score Ranking 
+// General High-Score Ranking 
 app.get('/api/rankings', (req, res) => {
     const query = `
         SELECT u.username, MAX(g.score) as best_score 
@@ -131,7 +113,7 @@ app.get('/api/rankings', (req, res) => {
     });
 });
 
-// 2. Fetch Full Map Structure (Setup Phase) 
+// Fetch Full Map Structure (Setup Phase) 
 app.get('/api/network', (req, res) => {
     const query = `
         SELECT l.name as line_name, l.color, s.name as station_name, ls.stop_sequence
@@ -186,7 +168,7 @@ function getShortestDistance(start, dest, adj) {
     return -1;
 }
 
-// 3. Initialize Game Session Parameters
+// Initialize Game Session Parameters
 app.post('/api/game/start', isLoggedIn, (req, res) => {
     const query = `
         SELECT l.name as line_name, l.color, s.name as station_name, ls.stop_sequence
@@ -194,11 +176,13 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
         JOIN lines l ON ls.line_id = l.id
         JOIN stations s ON ls.station_id = s.id
     `;
+    
     db.all(query, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const networkLines = {};
         const uniqueStations = new Set();
+        
         rows.forEach(row => {
             uniqueStations.add(row.station_name);
             if (!networkLines[row.line_name]) {
@@ -217,6 +201,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
         while (!validPair) {
             startStation = stationsArray[Math.floor(Math.random() * stationsArray.length)];
             destStation = stationsArray[Math.floor(Math.random() * stationsArray.length)];
+            
             if (startStation !== destStation) {
                 const distance = getShortestDistance(startStation, destStation, adj);
                 if (distance >= 3) validPair = true;
@@ -239,6 +224,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
         });
         segmentsArray.sort(() => Math.random() - 0.5);
 
+        // Send exactly one response back to the client
         res.json({
             startStation,
             destStation,
@@ -247,7 +233,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
     });
 });
 
-// 4. Process Route Validations & Apply Random Events 
+// Process Route Validations & Apply Random Events 
 app.post('/api/game/submit', isLoggedIn, (req, res) => {
     const { route, startStation, destStation } = req.body; 
     
@@ -272,7 +258,7 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
             const goodEvents = eventRows.filter(e => e.is_bad_event === 0);
             const badEvents = eventRows.filter(e => e.is_bad_event === 1);
 
-            let currentCoins = 20; // Games start with 20 coins 
+            let currentCoins = 20; 
             const actionsLog = [];
             let isValidPath = true;
 
@@ -304,12 +290,10 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
                 // Apply dynamic fatigue probability modifier
                 let chosenEvent;
                 if (i >= 4) {
-                    // 75% bad event weighting after traversing 4 stops
                     chosenEvent = Math.random() < 0.75 
                         ? badEvents[Math.floor(Math.random() * badEvents.length)]
                         : goodEvents[Math.floor(Math.random() * goodEvents.length)];
                 } else {
-                    // Standard uniform distributions across early nodes
                     chosenEvent = eventRows[Math.floor(Math.random() * eventRows.length)];
                 }
 
