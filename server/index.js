@@ -17,8 +17,39 @@ const PORT = 3001; // API server runs on 3001, React frontend runs on 5173
 // 1. Connect to SQLite database
 const db = new sqlite3.Database(path.join(__dirname, 'database.sqlite'), (err) => {
     if (err) console.error("❌ Database connection error:", err);
-    else console.log("💾 Connected to SQLite database successfully.");
+    else {
+        console.log("💾 Connected to SQLite database successfully.");
+        // Seed your custom user account into the database right upon a successful connection
+        seedCustomUser();
+    }
 });
+
+// Utility script to inject your custom test user directly into the DB safely
+async function seedCustomUser() {
+    const customUsername = 'mohsen';
+    const plainPassword = 'mypassword123';
+    
+    db.get("SELECT id FROM users WHERE username = ?", [customUsername], async (err, row) => {
+        if (err) {
+            console.error("❌ Error checking for seeded user:", err);
+            return;
+        }
+        if (!row) {
+            try {
+                const passwordHash = await bcrypt.hash(plainPassword, 10);
+                db.run("INSERT INTO users (username, password_hash) VALUES (?, ?)", [customUsername, passwordHash], (insertErr) => {
+                    if (insertErr) {
+                        console.error("❌ Failed to seed custom test user:", insertErr.message);
+                    } else {
+                        console.log(`💾 DB Seed: Custom account '${customUsername}' created successfully!`);
+                    }
+                });
+            } catch (hashError) {
+                console.error("❌ Error hashing seed password:", hashError);
+            }
+        }
+    });
+}
 
 // 2. Middleware & CORS Configuration
 app.use(cors({
@@ -201,7 +232,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
             }
         });
 
-        // Map and shuffle completely [Nokat #1, #9]
+        // Map and shuffle completely
         let segmentsArray = Array.from(segmentsSet).map(str => {
             const [source, destination] = str.split('—');
             return { source, destination };
@@ -270,7 +301,7 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
                     break;
                 }
 
-                // Apply dynamic fatigue probability modifier [Nokat #5]
+                // Apply dynamic fatigue probability modifier
                 let chosenEvent;
                 if (i >= 4) {
                     // 75% bad event weighting after traversing 4 stops
