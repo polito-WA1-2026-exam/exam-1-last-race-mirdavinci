@@ -50,7 +50,9 @@
 
 ## Screenshot
 
-![Screenshot](./img/screenshot.jpg)
+![Login Screen](./img/loginshot.jpg)
+
+![Gameplay Console](./img/gameshot.jpg)
 
 ## Users Credentials
 
