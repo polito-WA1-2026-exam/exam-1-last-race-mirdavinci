@@ -27,7 +27,6 @@ export default function App() {
   const [network, setNetwork] = useState({ lines: {} });
   const [allStations, setAllStations] = useState([]); 
 
-  //GAMEPLAY CORE ENGINE STATE
   const [gameState, setGameState] = useState('idle'); 
   const [startStation, setStartStation] = useState('');
   const [destStation, setDestStation] = useState('');
@@ -305,7 +304,7 @@ const navigateTo = (targetView) => {
       </Navbar>
 
       <Container>
-        {/* VIEW A:REFERENCE METRO GUIDE MAP */}
+
         {view === 'instructions' && (
           <Row>
             <Col md={12} className="mb-4">
@@ -362,7 +361,7 @@ const navigateTo = (targetView) => {
           </Row>
         )}
 
-        {/*GLOBAL LEADERBOARD RANKINGS */}
+
         {view === 'rankings' && (
           <Card className="shadow-sm border-0">
             <Card.Body>
@@ -429,7 +428,7 @@ const navigateTo = (targetView) => {
                 </div>
               )}
 
-              {/*ACTIVE TIMER ROUTE PLANNING EDITOR */}
+
               {gameState === 'planning' && (
                 <div>
 
@@ -468,7 +467,7 @@ const navigateTo = (targetView) => {
                   )}
 
                   <Row>
-                    {/* User Selection Sequence Column */}
+
                     <Col md={5} className="mb-3">
                       <Card className="h-100 border-0 bg-white shadow-sm">
                         <Card.Body>
@@ -517,7 +516,7 @@ const navigateTo = (targetView) => {
                 </div>
               )}
 
-              {/*JOURNEY SIMULATION SCREEN */}
+
               {gameState === 'execution' && (
                 <div className="text-center py-4">
                   <h4 className="text-primary fw-bold mb-2">🚇 Running Journey Simulation Engine...</h4>
@@ -546,7 +545,7 @@ const navigateTo = (targetView) => {
                 </div>
               )}
 
-              {/* MATCHNIGHT MISSION OUTCOME REPORT */}
+
               {gameState === 'result' && (
                 <div className="text-center py-5">
                   <div className="display-1 mb-3">{gameOutcome?.valid ? "🏆" : "💥"}</div>

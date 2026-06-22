@@ -14,7 +14,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3001; 
 
-// 1. Connect to SQLite database
 const db = new sqlite3.Database(path.join(__dirname, 'database.sqlite'), (err) => {
     if (err) console.error("❌ Database connection error:", err);
     else {
@@ -22,44 +21,44 @@ const db = new sqlite3.Database(path.join(__dirname, 'database.sqlite'), (err) =
     }
 });
 
-// 2. Middleware & CORS Configuration
+//Middleware & CORS Configuration
 app.use(cors({
     origin: 'http://localhost:5173',
     credentials: true
 }));
 app.use(express.json()); 
 
-// 3. Session Cookie State Configuration 
 app.use(session({
     secret: 'torino-secret-key-2026-last-race',
     resave: false,
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
-        secure: false, // Set to true if utilizing HTTPS
+        secure: false, 
         sameSite: 'lax'
     }
 }));
 
-// 4. Passport.js Authentication Lifecycle 
+//Passport.js Authentication  
 app.use(passport.initialize());
 app.use(passport.session());
 
-// FIXED: Cleaned up the nested LocalStrategy blocks!
-passport.use(new LocalStrategy((username, password, cb) => {
-    console.log("🛑 PASSPORT RECEIVED -> Username:", username, "| Password:", password);
 
-    // 1. Look up the user
+passport.use(new LocalStrategy((username, password, cb) => {
     db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
         if (err) return cb(err);
-        if (!row) return cb(null, false, { message: 'Incorrect username.' });
+        
 
-        // 2. Compare the typed password with the hashed password in the DB
+        if (!row) return cb(null, false, { message: 'Wrong username or password.' }); 
+
+
         bcrypt.compare(password, row.password_hash, (err, isMatch) => {
             if (err) return cb(err);
-            if (!isMatch) return cb(null, false, { message: 'Incorrect password.' });
             
-            // 3. Success! Return the user object
+
+            if (!isMatch) return cb(null, false, { message: 'Wrong username or password.' }); 
+            
+
             const user = { id: row.id, username: row.username };
             return cb(null, user);
         });
@@ -71,17 +70,13 @@ passport.deserializeUser((id, done) => {
     db.get('SELECT id, username FROM users WHERE id = ?', [id], (err, user) => done(err, user));
 });
 
-// Authentication Guard Middleware 
 const isLoggedIn = (req, res, next) => {
     if (req.isAuthenticated()) return next();
     return res.status(401).json({ error: 'User is unauthenticated.' });
 };
 
-// ==========================================
-// HTTP API ROUTING LAYERS
-// ==========================================
 
-// Session management 
+
 app.post('/api/login', passport.authenticate('local'), (req, res) => {
     res.json({ id: req.user.id, username: req.user.username });
 });
@@ -98,7 +93,6 @@ app.get('/api/session', (req, res) => {
     else res.status(401).json({ error: 'No active session.' });
 });
 
-// General High-Score Ranking 
 app.get('/api/rankings', (req, res) => {
     const query = `
         SELECT u.username, MAX(g.score) as best_score 
@@ -113,7 +107,7 @@ app.get('/api/rankings', (req, res) => {
     });
 });
 
-// Fetch Full Map Structure (Setup Phase) 
+// Fetch Full Map Structure
 app.get('/api/network', (req, res) => {
     const query = `
         SELECT l.name as line_name, l.color, s.name as station_name, ls.stop_sequence
@@ -168,7 +162,7 @@ function getShortestDistance(start, dest, adj) {
     return -1;
 }
 
-// Initialize Game Session Parameters
+
 app.post('/api/game/start', isLoggedIn, (req, res) => {
     const query = `
         SELECT l.name as line_name, l.color, s.name as station_name, ls.stop_sequence
@@ -197,7 +191,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
         let startStation, destStation;
         let validPair = false;
 
-        // Ensure randomly picked objectives are at least 3 segments apart 
+
         while (!validPair) {
             startStation = stationsArray[Math.floor(Math.random() * stationsArray.length)];
             destStation = stationsArray[Math.floor(Math.random() * stationsArray.length)];
@@ -208,7 +202,6 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
             }
         }
 
-        // Gather all valid directly connected pairs from the layout
         const segmentsSet = new Set();
         Object.values(networkLines).forEach(line => {
             for (let i = 0; i < line.stations.length - 1; i++) {
@@ -224,7 +217,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
         });
         segmentsArray.sort(() => Math.random() - 0.5);
 
-        // Send exactly one response back to the client
+        // Send one response to the client
         res.json({
             startStation,
             destStation,
@@ -237,7 +230,7 @@ app.post('/api/game/start', isLoggedIn, (req, res) => {
 app.post('/api/game/submit', isLoggedIn, (req, res) => {
     const { route, startStation, destStation } = req.body; 
     
-    // Fallback baseline framing validation checks 
+
     if (!route || route.length < 2 || route[0] !== startStation || route[route.length - 1] !== destStation) {
         return res.json({ valid: false, finalScore: 0, actionsLog: [] });
     }
@@ -268,7 +261,7 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
                 linesMap[row.line_name].push(row.station_name);
             });
 
-            // Process user selections step-by-step
+
             for (let i = 0; i < route.length - 1; i++) {
                 const s1 = route[i];
                 const s2 = route[i + 1];
@@ -287,7 +280,7 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
                     break;
                 }
 
-                // Apply dynamic fatigue probability modifier
+                // fatigue probability modifier
                 let chosenEvent;
                 if (i >= 4) {
                     chosenEvent = Math.random() < 0.75 
@@ -309,7 +302,6 @@ app.post('/api/game/submit', isLoggedIn, (req, res) => {
 
             const finalScore = isValidPath ? Math.max(0, currentCoins) : 0;
 
-            // Save results to history logging table 
             db.run(`INSERT INTO game_history (user_id, start_station, destination_station, score) VALUES (?, ?, ?, ?)`,
                 [req.user.id, startStation, destStation, finalScore], (insertErr) => {
                     if (insertErr) console.error("History write error:", insertErr);
